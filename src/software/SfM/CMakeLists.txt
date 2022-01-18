@@ -46,6 +46,22 @@ target_link_libraries(openMVG_main_ComputeFeatures
     ${STLPLUS_LIBRARY}
     vlsift
 )
+
+#
+#
+#
+add_executable(openMVG_main_ComputeFeatures_m main_ComputeFeatures_m.cpp)
+target_link_libraries(openMVG_main_ComputeFeatures_m
+  PRIVATE
+    openMVG_system
+    openMVG_image
+    openMVG_features
+    openMVG_multiview
+    openMVG_sfm
+    ${STLPLUS_LIBRARY}
+    vlsift
+)
+
 if (MSVC)
   set_target_properties(openMVG_main_ComputeFeatures PROPERTIES COMPILE_FLAGS "/bigobj")
 endif (MSVC)
