@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <string>
+#include <sstream>
 
 #ifdef OPENMVG_USE_OPENMP
 #include <omp.h>
@@ -56,6 +57,216 @@ features::EDESCRIBER_PRESET stringToEnum(const std::string & sPreset)
   else
     preset = features::EDESCRIBER_PRESET(-1);
   return preset;
+}
+
+/*
+virtual bool IsScalar() const = 0;
+  virtual bool IsBinary() const = 0;
+
+  /// basis element used for description
+  virtual std::string Type_id() const = 0;
+  virtual size_t DescriptorLength() const = 0;
+  //--
+
+  //-- Assume that a region can always be represented at least by a 2D positions
+  virtual PointFeatures GetRegionsPositions() const = 0;
+  virtual Vec2 GetRegionPosition(size_t i) const = 0;
+
+  /// Return the number of defined regions
+  virtual size_t RegionCount() const = 0;
+
+  float x()
+  float y();
+  float scale() const;
+  float& scale();
+  float orientation() const;
+  float& orientation();
+*/
+/*
+{
+    "version": 1,
+    "id": "0a82942aff82d061bd2ed0a30f99a671cdaff358",
+    "method": "akaze",
+    "features": [
+        {
+            "x": 102.46697998046875,
+            "y": 29.06245231628418,
+            "index": 0,
+            "size": 4.800000190734863,
+            "angle": 134.0617218017578,
+            "response": 0.001195466727949679,
+            "octave": 0,
+            "class_id": 0
+        },
+    ],
+    "image": {
+        "width": 3024,
+        "height": 4032
+    },
+    "descriptors": "0a82942aff82d061bd2ed0a30f99a671cdaff358.feature.npz"
+}
+*/
+static std::string Indent(int k)
+{
+  std::string s = "";
+  for(int i = 0; i < k; i++)
+  {
+    s += "    ";
+  }
+  return s;
+}
+
+static std::string Stringify(const std::string& s)
+{
+  return "\"" + s + "\"";
+}
+
+template<class R> 
+static bool SaveRegionsToJson(std::ostream& ss, int indent, const std::unique_ptr<Regions>& region)
+{
+  const R* r = dynamic_cast<const R*>(region.get());
+  if(r == nullptr)
+  {
+    return false;
+  }
+
+  const auto& features = r->Features();
+  for(int j = 0; j < features.size(); j++)
+  {
+    const auto& f = features[j];
+    ss << Indent(indent) << "{" << std::endl;
+    indent += 1;
+    {
+      const double angle = f.orientation() * 180.0 / M_PI; 
+      ss << Indent(indent) << Stringify("x") << ": " << f.x() << ", " << std::endl;
+      ss << Indent(indent) << Stringify("y") << ": " << f.y() << ", " << std::endl;
+      ss << Indent(indent) << Stringify("index") << ": " << j << ", " << std::endl;
+      ss << Indent(indent) << Stringify("size") << ": " << f.scale() << ", " << std::endl;
+      ss << Indent(indent) << Stringify("angle") << ": " << angle << ", " << std::endl;
+      ss << Indent(indent) << Stringify("response") << ": " << 1.0 << ", " << std::endl;
+      ss << Indent(indent) << Stringify("octave") << ": " << 0 << ", " << std::endl;
+      ss << Indent(indent) << Stringify("class_id") << ": " << 0 << std::endl;
+    }
+    indent -= 1;
+    ss << Indent(indent) << "}";
+    if (j != features.size()-1)
+    {
+      ss << "," << std::endl;
+    }
+    else
+    {
+      ss << std::endl;
+    }
+  }
+  return true;
+}
+
+static std::string Boolean(bool b)
+{
+  return b? "true" : "false";
+}
+
+static std::string GetMethod(const std::unique_ptr<Regions>& region)
+{
+  {
+    const SIFT_Regions* r = dynamic_cast<const SIFT_Regions*>(region.get());
+    if(r != nullptr)
+    {
+      return "sift";
+    }
+  }
+  {
+    const AKAZE_Float_Regions* r = dynamic_cast<const AKAZE_Float_Regions*>(region.get());
+    if(r != nullptr)
+    {
+      return "akaze_scalar";
+    }
+  }
+
+  {
+    const AKAZE_Liop_Regions* r = dynamic_cast<const AKAZE_Liop_Regions*>(region.get());
+    if(r != nullptr)
+    {
+      return "akaze_liop";
+    }
+  }
+
+  {
+    const AKAZE_Binary_Regions* r = dynamic_cast<const AKAZE_Binary_Regions*>(region.get());
+    if(r != nullptr)
+    {
+      return "akaze";
+    }
+  }
+
+  return "unknown";
+}
+
+static bool SaveToJson(const Image<unsigned char>& image, const std::unique_ptr<Regions>& region, const std::string& path)
+{
+  //OPENMVG_LOG_INFO << "path:" << path << std::endl; 
+  //OPENMVG_LOG_INFO << "IsScalar:" << region->IsScalar() << std::endl;
+  //OPENMVG_LOG_INFO << "Type_id:" << region->Type_id() << std::endl;
+  //OPENMVG_LOG_INFO << "DescriptorLength:" << region->DescriptorLength() << std::endl;
+  //OPENMVG_LOG_INFO << "RegionCount:" << region->RegionCount() << std::endl;
+  std::string id = stlplus::basename_part(stlplus::basename_part(path));
+  std::stringstream ss;
+  {
+    int indent = 0;
+    ss << "{" << std::endl;
+    indent+= 1;
+    /*
+    "version": 1,
+    "id": "0a82942aff82d061bd2ed0a30f99a671cdaff358",
+    "method": "akaze",
+    */
+    ss << Indent(indent) << Stringify("version") << ": " << "1" << "," << std::endl;
+    ss << Indent(indent) << Stringify("id") << ": " << Stringify(id) << "," << std::endl;
+    ss << Indent(indent) << Stringify("method") << ": " << Stringify(GetMethod(region)) << "," << std::endl;
+    ss << Indent(indent) << Stringify("is_binary") << ": " << Boolean(region->IsBinary()) << ", " << std::endl;
+    ss << Indent(indent) << Stringify("descriptor_length") << ": " << region->DescriptorLength() << ", " << std::endl;
+    /*
+    "features": [
+    */
+    if(region->RegionCount() > 0)
+    {
+      ss << Indent(indent) << Stringify("features") << ": [" << std::endl;
+      indent += 1;
+      if(SaveRegionsToJson<SIFT_Regions>(ss, indent, region))
+      {}
+      else if(SaveRegionsToJson<AKAZE_Float_Regions>(ss, indent, region))
+      {}
+      else if(SaveRegionsToJson<AKAZE_Liop_Regions>(ss, indent, region))
+      {}
+      else if(SaveRegionsToJson<AKAZE_Binary_Regions>(ss, indent, region))
+      {}
+      indent -= 1;
+      ss << Indent(indent) <<  "]" << "," << std::endl;
+    }
+
+    ss << Indent(indent) << Stringify("image") << ": {" << std::endl;
+    indent += 1;
+    ss << Indent(indent) << Stringify("width") << ": " << image.Width() << "," << std::endl;
+    ss << Indent(indent) << Stringify("height") << ": " << image.Height() << std::endl;
+    indent -= 1;
+    ss << Indent(indent) << "}," << std::endl;
+
+    std::string desPath = id + ".feature.bin";//
+    ss << Indent(indent) << Stringify("descriptors") << ": " << Stringify(desPath) << std::endl;
+    indent -= 1;
+    ss << "}" << std::endl;
+  }
+  std::ofstream ofs(path);
+  if(ofs)
+  {
+    ofs << ss.str() << std::flush;
+    return true;
+  }
+  else
+  {
+    OPENMVG_LOG_INFO << "cannot read:" << path << std::endl; 
+  }
+  return false;
 }
 
 /// - Compute view image description (feature & descriptor extraction)
@@ -192,8 +403,16 @@ int main(int argc, char **argv)
     // Don't use a factory, perform direct allocation
     if (sImage_Describer_Method == "SIFT")
     {
-      image_describer.reset(new SIFT_Image_describer
-        (SIFT_Image_describer::Params(), !bUpRight));
+      /*
+      int first_octave = 0,
+      int num_octaves = 6,
+      int num_scales = 3,
+      float edge_threshold = 10.0f,
+      float peak_threshold = 0.04f,
+      bool root_sift = true
+      */
+      auto params = SIFT_Image_describer::Params();
+      image_describer.reset(new SIFT_Image_describer(params, !bUpRight));
     }
     else
     if (sImage_Describer_Method == "SIFT_ANATOMY")
@@ -221,12 +440,14 @@ int main(int argc, char **argv)
     }
     else
     {
-      if (!sFeaturePreset.empty())
+      //if (!sFeaturePreset.empty())
+      /*
       if (!image_describer->Set_configuration_preset(stringToEnum(sFeaturePreset)))
       {
         OPENMVG_LOG_ERROR << "Preset configuration failed.";
         return EXIT_FAILURE;
       }
+      */
     }
 
     // Export the used Image_describer and region type for:
@@ -271,10 +492,14 @@ int main(int argc, char **argv)
       Views::const_iterator iterViews = sfm_data.views.begin();
       std::advance(iterViews, i);
       const View * view = iterViews->second.get();
-      const std::string
-        sView_filename = stlplus::create_filespec(sfm_data.s_root_path, view->s_Img_path),
-        sFeat = stlplus::create_filespec(sOutDir, stlplus::basename_part(sView_filename), "feat"),
-        sDesc = stlplus::create_filespec(sOutDir, stlplus::basename_part(sView_filename), "desc");
+      const std::string sView_filename = stlplus::create_filespec(sfm_data.s_root_path, view->s_Img_path);
+      const std::string sFeat = stlplus::create_filespec(sOutDir, stlplus::basename_part(sView_filename), "feat");
+      const std::string sDesc = stlplus::create_filespec(sOutDir, stlplus::basename_part(sView_filename), "desc");
+      const std::string sJson = stlplus::create_filespec(sOutDir, stlplus::basename_part(sView_filename), "feature.json");
+
+      //std::cout << sView_filename << std::endl;
+      //std::cout << sFeat << std::endl;
+      //std::cout << sDesc << std::endl;
 
       // If features or descriptors file are missing, compute them
       if (!preemptive_exit && (bForce || !stlplus::file_exists(sFeat) || !stlplus::file_exists(sDesc)))
@@ -338,6 +563,16 @@ int main(int argc, char **argv)
           preemptive_exit = true;
           continue;
         }
+
+        if(regions && !SaveToJson(imageGray, regions, sJson))
+        {
+          OPENMVG_LOG_ERROR
+            << "Cannot save regions for image: " << sJson << ';'
+            << "Stopping feature extraction.";
+          preemptive_exit = true;
+          continue;
+        }
+        
       }
       ++my_progress_bar;
     }
