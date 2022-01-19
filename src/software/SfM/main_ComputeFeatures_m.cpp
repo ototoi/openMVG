@@ -122,7 +122,7 @@ static std::string Stringify(const std::string& s)
 }
 
 template<class R> 
-static bool SaveRegionsToJson(std::ostream& ss, int indent, const std::unique_ptr<Regions>& region)
+static bool SaveRegionsToJson(std::ostream& ss, int indent, const Image<unsigned char>& image, const std::unique_ptr<Regions>& region)
 {
   const R* r = dynamic_cast<const R*>(region.get());
   if(r == nullptr)
@@ -130,16 +130,22 @@ static bool SaveRegionsToJson(std::ostream& ss, int indent, const std::unique_pt
     return false;
   }
 
+  const auto width = image.Height();
+  const auto height = image.Width();
+
   const auto& features = r->Features();
   for(int j = 0; j < features.size(); j++)
   {
     const auto& f = features[j];
     ss << Indent(indent) << "{" << std::endl;
     indent += 1;
+
+    const auto x = width - f.y();
+    const auto y = f.x();
     {
       const double angle = f.orientation() * 180.0 / M_PI; 
-      ss << Indent(indent) << Stringify("x") << ": " << f.x() << ", " << std::endl;
-      ss << Indent(indent) << Stringify("y") << ": " << f.y() << ", " << std::endl;
+      ss << Indent(indent) << Stringify("x") << ": " << x << ", " << std::endl;
+      ss << Indent(indent) << Stringify("y") << ": " << y << ", " << std::endl;
       ss << Indent(indent) << Stringify("index") << ": " << j << ", " << std::endl;
       ss << Indent(indent) << Stringify("size") << ": " << f.scale() << ", " << std::endl;
       ss << Indent(indent) << Stringify("angle") << ": " << angle << ", " << std::endl;
@@ -225,20 +231,22 @@ static bool SaveToJson(const Image<unsigned char>& image, const std::unique_ptr<
     ss << Indent(indent) << Stringify("method") << ": " << Stringify(GetMethod(region)) << "," << std::endl;
     ss << Indent(indent) << Stringify("is_binary") << ": " << Boolean(region->IsBinary()) << ", " << std::endl;
     ss << Indent(indent) << Stringify("descriptor_length") << ": " << region->DescriptorLength() << ", " << std::endl;
-    /*
+    ss << Indent(indent) << Stringify("feature_count") << ": " << region->RegionCount() << ", " << std::endl;
+   
+   /*
     "features": [
     */
     if(region->RegionCount() > 0)
     {
       ss << Indent(indent) << Stringify("features") << ": [" << std::endl;
       indent += 1;
-      if(SaveRegionsToJson<SIFT_Regions>(ss, indent, region))
+      if(SaveRegionsToJson<SIFT_Regions>(ss, indent, image, region))
       {}
-      else if(SaveRegionsToJson<AKAZE_Float_Regions>(ss, indent, region))
+      else if(SaveRegionsToJson<AKAZE_Float_Regions>(ss, indent, image, region))
       {}
-      else if(SaveRegionsToJson<AKAZE_Liop_Regions>(ss, indent, region))
+      else if(SaveRegionsToJson<AKAZE_Liop_Regions>(ss, indent, image, region))
       {}
-      else if(SaveRegionsToJson<AKAZE_Binary_Regions>(ss, indent, region))
+      else if(SaveRegionsToJson<AKAZE_Binary_Regions>(ss, indent, image, region))
       {}
       indent -= 1;
       ss << Indent(indent) <<  "]" << "," << std::endl;
@@ -246,8 +254,8 @@ static bool SaveToJson(const Image<unsigned char>& image, const std::unique_ptr<
 
     ss << Indent(indent) << Stringify("image") << ": {" << std::endl;
     indent += 1;
-    ss << Indent(indent) << Stringify("width") << ": " << image.Width() << "," << std::endl;
-    ss << Indent(indent) << Stringify("height") << ": " << image.Height() << std::endl;
+    ss << Indent(indent) << Stringify("width") << ": " << image.Height() << "," << std::endl;
+    ss << Indent(indent) << Stringify("height") << ": " << image.Width() << std::endl;
     indent -= 1;
     ss << Indent(indent) << "}," << std::endl;
 
